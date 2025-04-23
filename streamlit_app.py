@@ -130,15 +130,17 @@ if "right_filter_count" not in st.session_state:
 # SELECT section
 st.markdown("# 🔍 SELECT")
 with st.form("select_form"):
+    # 키 이름을 변경 (_select 접미사 추가)
     left_columns = st.multiselect(f"{left_db_nm} 칼럼", options=product_columns_types.keys(), 
-                               default=list(product_columns_types.keys()), key="left_columns")
+                               default=list(product_columns_types.keys()), key="left_columns_select")
     right_columns = st.multiselect(f"{right_db_nm} 칼럼", options=order_columns_types.keys(), 
-                                default=list(order_columns_types.keys()), key="right_columns")
+                                default=list(order_columns_types.keys()), key="right_columns_select")
     select_submitted = st.form_submit_button("칼럼 선택 저장")
     
     if select_submitted:
-        st.session_state.left_columns = left_columns
-        st.session_state.right_columns = right_columns
+        # 다른 키 이름으로 저장 (_selected 접미사 사용)
+        st.session_state.left_columns_selected = left_columns
+        st.session_state.right_columns_selected = right_columns
         st.success("칼럼 선택이 저장되었습니다.")
 
 st.markdown("---")
@@ -215,5 +217,4 @@ if st.button("🚀 INNER JOIN 실행", key="execute_join"):
     st.session_state.left_filters = left_filters
     st.session_state.right_filters = right_filters
 
-    # 여기에 실제 JOIN 연산
-    main()
+    main(notion)

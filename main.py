@@ -194,11 +194,9 @@ def main(notion):
         right_df = notion_to_dataframe(right_columns, right_db_rows)
         
         # 필터 적용
-        if hasattr(st.session_state, 'left_filters'):
-            left_df = apply_filter(left_df, st.session_state.left_filters, left_columns_types)
-        
-        if hasattr(st.session_state, 'right_filters'):
-            right_df = apply_filter(right_df, st.session_state.right_filters, right_columns_types)
+        if hasattr(st.session_state, 'left_columns_selected') and hasattr(st.session_state, 'right_columns_selected'):
+            selected_left_cols = st.session_state.left_columns_selected
+            selected_right_cols = st.session_state.right_columns_selected
         
         # 조인 조건 가져오기
         join_conditions = []
