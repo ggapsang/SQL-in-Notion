@@ -35,22 +35,3 @@
 |`people`|노션 사용자(멤버)를 태그|`[사용자1, 사용자2]`|
 |`created_time`|해당 페이지 생성 시간|`2025-04-21T12:34:56Z`|
 |`last_edited_time`|마지막 수정 시간|`2025-04-22T09:30:00Z`|
-
-```json
-{
-  "object": "page",
-  "id": "...",
-  "properties": {
-    "이름": {
-      "type": "title",
-      "title": [{ "text": { "content": "홍길동" } }]
-    },
-    "나이": {
-      "type": "number",
-      "number": 30
-    },
-    ...
-  }
-}
-
-```
