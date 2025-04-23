@@ -1,3 +1,9 @@
+import pandas as pd
+import streamlit as st
+from notion_client import Client
+from datetime import datetime
+
+
 def format_database_id(raw_id: str) -> str:
     """하이픈 없는 Notion 데이터베이스 ID를 하이픈 포함된 형식으로 변환"""
     return f"{raw_id[:8]}-{raw_id[8:12]}-{raw_id[12:16]}-{raw_id[16:20]}-{raw_id[20:]}"
@@ -73,22 +79,112 @@ def load_database_info(notion, database_id):
         columns_types[prop_name] = prop_type
     
     return db, columns_types
-
-def get_dict_from_row(row, db_columns):
-    """
-    Notion 데이터베이스의 row에서 각 속성의 값을 추출하여 딕셔너리로 반환
-    Args:
-        row (dict): Notion 데이터베이스 행 객체
-        db_columns (list): 데이터베이스 칼럼 리스트
-    Returns:
-        dict: 속성 이름을 키로 하는 딕셔너리
-    """
-    result = {}
-    for col in db_columns:
-        if col in row["properties"]:
-            prop = row["properties"][col]
-            result[col] = extract_text_value(prop)
-        else:
-            result[col] = None
-    return result
     
+    
+def notion_to_dataframe(db_columns, db_rows):
+    """Notion 데이터베이스 행들을 pandas DataFrame으로 변환"""
+    data = []
+    for row in db_rows:
+        row_dict = {}
+        for col in db_columns:
+            if col in row["properties"]:
+                prop = row["properties"][col]
+                row_dict[col] = extract_text_value(prop)
+            else:
+                row_dict[col] = None
+        data.append(row_dict)
+    return pd.DataFrame(data)
+
+def perform_inner_join(left_df, right_df, join_conditions):
+    """두 DataFrame간 inner join 수행"""
+    if not join_conditions:
+        st.error("조인 조건이 설정되지 않았습니다!")
+        return None
+    
+    # join_conditions를 pandas merge에 맞는 형식으로 변환
+    left_on = []
+    right_on = []
+    
+    for left_col, right_col in join_conditions:
+        left_on.append(left_col)
+        right_on.append(right_col)
+    
+    # suffixes 설정
+    left_suffix = '_left'
+    right_suffix = '_right'
+    
+    # 조인 수행
+    try:
+        result_df = pd.merge(
+            left_df, right_df, 
+            left_on=left_on, right_on=right_on, 
+            how='inner',
+            suffixes=(left_suffix, right_suffix)
+        )
+        return result_df
+    except Exception as e:
+        st.error(f"조인 수행 중 오류 발생: {e}")
+        return None
+
+def create_notion_database(notion, parent_page_id, database_name, columns):
+    """Notion에 새 데이터베이스 생성"""
+    properties = {}
+    
+    # Name 속성 (필수)
+    properties["Name"] = {
+        "title": {}
+    }
+    
+    # 나머지 속성 추가
+    for col in columns:
+        if col != "Name":  # Name은 이미 추가됨
+            properties[col] = {
+                "rich_text": {}
+            }
+    
+    try:
+        response = notion.databases.create(
+            parent={"page_id": parent_page_id},
+            title=[{
+                "type": "text",
+                "text": {"content": database_name}
+            }],
+            properties=properties
+        )
+        return response["id"]
+    except Exception as e:
+        st.error(f"데이터베이스 생성 중 오류 발생: {e}")
+        return None
+
+def add_rows_to_notion_database(notion, database_id, df):
+    """DataFrame의 데이터를 Notion 데이터베이스에 행으로 추가"""
+    success_count = 0
+    total_count = len(df)
+    
+    with st.spinner(f'Notion에 {total_count}개 행 추가 중...'):
+        for i, row in df.iterrows():
+            try:
+                properties = {}
+                
+                # 첫 번째 열을 title로 사용
+                first_col = df.columns[0]
+                properties["Name"] = {
+                    "title": [{"text": {"content": str(row[first_col])}}]
+                }
+                
+                # 나머지 열을 rich_text로 추가
+                for col in df.columns:
+                    if col != first_col:
+                        properties[col] = {
+                            "rich_text": [{"text": {"content": str(row[col])}}]
+                        }
+                
+                notion.pages.create(
+                    parent={"database_id": database_id},
+                    properties=properties
+                )
+                success_count += 1
+            except Exception as e:
+                st.error(f"행 {i+1} 추가 중 오류: {e}")
+        
+        return success_count, total_count

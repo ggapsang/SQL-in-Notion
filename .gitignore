@@ -1,2 +1,4 @@
 *.conda
 .conda/
+.pyc
+*.pyc
