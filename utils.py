@@ -56,11 +56,39 @@ def extract_date_range(prop):
     except:
         return None, None
 
-def load_database_info(notion, db_id):
-    """Notion 데이터베이스의 정보를 가져오고, 칼럼 타입 정보도 함께 반환"""
-    db = notion.databases.retrieve(database_id=db_id)
+def load_database_info(notion, database_id):
+    """
+    Notion 데이터베이스의 정보와 칼럼 타입 정보를 반환
+    Args:
+        notion (Client): 인증된 Notion API 클라이언트
+        database_id (str): 데이터베이스 ID
+    Returns:
+        tuple: (database_obj, column_types_dict)
+    """
+    db = notion.databases.retrieve(database_id=database_id)
+    columns_types = {}
     
-    columns_with_types = {}
-    for name, prop in db.get("properties", {}).items():
-        columns_with_types[name] = prop["type"]
-    return db, columns_with_types
+    for prop_name, prop_info in db.get("properties", {}).items():
+        prop_type = prop_info.get("type")
+        columns_types[prop_name] = prop_type
+    
+    return db, columns_types
+
+def get_dict_from_row(row, db_columns):
+    """
+    Notion 데이터베이스의 row에서 각 속성의 값을 추출하여 딕셔너리로 반환
+    Args:
+        row (dict): Notion 데이터베이스 행 객체
+        db_columns (list): 데이터베이스 칼럼 리스트
+    Returns:
+        dict: 속성 이름을 키로 하는 딕셔너리
+    """
+    result = {}
+    for col in db_columns:
+        if col in row["properties"]:
+            prop = row["properties"][col]
+            result[col] = extract_text_value(prop)
+        else:
+            result[col] = None
+    return result
+    

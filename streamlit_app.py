@@ -199,17 +199,21 @@ st.markdown("---")
 # Join
 if st.button("🚀 INNER JOIN 실행", key="execute_join"):
 
-    st.write("### LEFT 필터:")
+    st.write("#### LEFT 필터:")
     for i, filter_condition in enumerate(left_filters):
         st.write(f"{i+1}. {filter_condition['column']} {filter_condition['operator']} {filter_condition['value']}")
     
-    st.write("### RIGHT 필터")
+    st.write("#### RIGHT 필터")
     for i, filter_condition in enumerate(right_filters):
         st.write(f"{i+1}. {filter_condition['column']} {filter_condition['operator']} {filter_condition['value']}")
     
-    st.write("### JOIN:")
+    st.write("#### JOIN:")
     for i, (left_col, right_col) in enumerate(join_conditions):
         st.write(f"{i+1}. {left_db_nm}.{left_col} = {right_db_nm}.{right_col}")
     
+    # 세션 상태에 필터 조건 저장
+    st.session_state.left_filters = left_filters
+    st.session_state.right_filters = right_filters
+
     # 여기에 실제 JOIN 연산
     main()
