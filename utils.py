@@ -34,7 +34,7 @@ def extract_text_value(prop):
         if typ == "title":
             return prop["title"][0]["plain_text"] if prop["title"] else ""
         elif typ == "rich_text":
-            return prop["rich_text"][0]["text"]["plain_text"] if prop["rich_text"] else ""
+            return prop["rich_text"][0]["plain_text"] if prop["rich_text"] else ""
         elif typ == "select":
             return prop["select"]["name"] if prop["select"] else ""
         elif typ == "number":

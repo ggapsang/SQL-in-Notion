@@ -2,6 +2,7 @@ import streamlit as st
 from notion_client import Client
 from datetime import datetime, timedelta
 from utils import format_database_id, get_user_databases, get_database_rows, get_database_columns, extract_text_value, load_database_info
+from main import main
 
 # Notion 설정
 notion = Client(auth="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")  # 테스트용 토큰
@@ -14,9 +15,6 @@ order_db_id = format_database_id(SAMPLE_ORDER_DB_ID)
 
 product_db, product_columns_types = load_database_info(notion, product_db_id)
 order_db, order_columns_types = load_database_info(notion, order_db_id)
-
-def go_inner_join():
-    return "INNER JOIN 결과"
 
 # 칼럼 타입에 따른 필터 옵션 정의
 def get_filter_options(column_type):
@@ -58,6 +56,7 @@ def render_filter_value_input(column_type, operator, key):
         return st.checkbox("참/거짓", key=f"{key}_value")
     else:
         return st.text_input("값", key=f"{key}_value", label_visibility="visible")
+
 # 필터 조건 UI 컴포넌트
 def render_filter_condition(db_name, columns_types, index, key_prefix):
     st.markdown(f"##### 조건 {index+1}")
@@ -101,7 +100,7 @@ def render_filter_condition(db_name, columns_types, index, key_prefix):
     }
 
 
-# 페이지 설정
+### 페이지 설정 ###
 st.title("SQL IN NOTION PROJECT")
 st.subheader("INNER JOIN")
 
@@ -119,19 +118,16 @@ right_db_nm = right_db_label[0]
 st.write()
 st.markdown("---")
 
-# JOIN 조건 수 초기화
 if "join_condition_count" not in st.session_state:
     st.session_state.join_condition_count = 1
 
-# LEFT WHERE 필터 수 초기화
 if "left_filter_count" not in st.session_state:
     st.session_state.left_filter_count = 0
 
-# RIGHT WHERE 필터 수 초기화
 if "right_filter_count" not in st.session_state:
     st.session_state.right_filter_count = 0
 
-# SELECT 폼
+# SELECT section
 st.markdown("# 🔍 SELECT")
 with st.form("select_form"):
     left_columns = st.multiselect(f"{left_db_nm} 칼럼", options=product_columns_types.keys(), 
@@ -147,9 +143,10 @@ with st.form("select_form"):
 
 st.markdown("---")
 
-# FROM
+# FROM section
 st.markdown("# 📚 FROM")
 st.markdown(f"### {left_db_nm}")
+
 def add_left_filter():
     st.session_state.left_filter_count += 1
 
@@ -161,13 +158,14 @@ for i in range(st.session_state.left_filter_count):
 st.button("➕ 필터 추가", on_click=add_left_filter, key="add_left_filter")
 st.markdown("---")
 
-# INNER JOIN
+# INNER JOIN section
 st.markdown("# 🔗 INNER JOIN")
 st.markdown(f"### {right_db_nm}")
+
 def add_right_filter():
     st.session_state.right_filter_count += 1
 
-# RIGHT WHERE 필터 조건 렌더링
+## RIGHT WHERE 필터 조건 렌더링
 right_filters = []
 for i in range(st.session_state.right_filter_count):
     filter_condition = render_filter_condition(right_db_nm, order_columns_types, i, "right_filter")
@@ -177,7 +175,7 @@ st.button("➕ RIGHT 필터 추가", on_click=add_right_filter, key="add_right_f
 st.markdown("---")
 
 
-# ON 조건
+# ON section
 def add_join_condition():
     st.session_state.join_condition_count += 1
 
@@ -198,20 +196,20 @@ for i in range(st.session_state.join_condition_count):
 st.button("➕ JOIN 조건 추가", on_click=add_join_condition, key="add_join_condition")
 st.markdown("---")
 
-# 최종 JOIN 실행
+# Join
 if st.button("🚀 INNER JOIN 실행", key="execute_join"):
-    # 필터 조건과 JOIN 조건을 사용하여 결과 생성 로직
-    st.write("### LEFT 필터 조건:")
+
+    st.write("### LEFT 필터:")
     for i, filter_condition in enumerate(left_filters):
         st.write(f"{i+1}. {filter_condition['column']} {filter_condition['operator']} {filter_condition['value']}")
     
-    st.write("### RIGHT 필터 조건:")
+    st.write("### RIGHT 필터")
     for i, filter_condition in enumerate(right_filters):
         st.write(f"{i+1}. {filter_condition['column']} {filter_condition['operator']} {filter_condition['value']}")
     
-    st.write("### JOIN 조건:")
+    st.write("### JOIN:")
     for i, (left_col, right_col) in enumerate(join_conditions):
         st.write(f"{i+1}. {left_db_nm}.{left_col} = {right_db_nm}.{right_col}")
     
-    # 여기에 실제 JOIN 연산 로직 구현
-    go_inner_join()
+    # 여기에 실제 JOIN 연산
+    main()
