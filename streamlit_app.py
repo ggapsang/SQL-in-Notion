@@ -1,7 +1,7 @@
 import streamlit as st
 from notion_client import Client
-from datetime import datetime
-from utils import format_database_id, get_user_databases, get_database_rows, get_database_columns, extract_text_value
+from datetime import datetime, timedelta
+from utils import format_database_id, get_user_databases, get_database_rows, get_database_columns, extract_text_value, load_database_info
 
 # Notion 설정
 notion = Client(auth="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")  # 테스트용 토큰
@@ -12,12 +12,94 @@ SAMPLE_ORDER_DB_ID = "1ddc9e59127881eca812cf3238d176bb"
 product_db_id = format_database_id(SAMPLE_PRODUCT_DB_ID)
 order_db_id = format_database_id(SAMPLE_ORDER_DB_ID)
 
-product_db = notion.databases.retrieve(database_id=product_db_id)
-order_db = notion.databases.retrieve(database_id=order_db_id)
-
+product_db, product_columns_types = load_database_info(notion, product_db_id)
+order_db, order_columns_types = load_database_info(notion, order_db_id)
 
 def go_inner_join():
     return "INNER JOIN 결과"
+
+# 칼럼 타입에 따른 필터 옵션 정의
+def get_filter_options(column_type):
+    if column_type in ["title", "rich_text"]:
+        return ["equals", "contains", "starts_with", "ends_with", "is_empty", "is_not_empty"]
+    elif column_type == "number":
+        return ["equals", "does_not_equal", "greater_than", "less_than", "greater_than_or_equal_to", "less_than_or_equal_to", "is_empty", "is_not_empty"]
+    elif column_type == "select":
+        return ["equals", "does_not_equal", "is_empty", "is_not_empty"]
+    elif column_type == "multi_select":
+        return ["contains", "does_not_contain", "is_empty", "is_not_empty"]
+    elif column_type == "date":
+        return ["equals", "before", "after", "on_or_before", "on_or_after", "this_week", "past_week", "past_month", "past_year", "is_empty", "is_not_empty"]
+    elif column_type == "checkbox":
+        return ["equals"]
+    else:
+        return ["equals", "is_empty", "is_not_empty"]  # 기본 옵션
+
+# 필터 값 UI 렌더링
+def render_filter_value_input(column_type, operator, key):
+    if column_type in ["title", "rich_text", "url", "email", "phone_number"]:
+        return st.text_input("값", key=f"{key}_value", label_visibility="visible")
+    elif column_type == "number":
+        return st.number_input("값", key=f"{key}_value", step=0.1, label_visibility="visible")
+    elif column_type == "select":
+        # 실제 구현에서는 해당 select 옵션 목록을 가져와야 함
+        options = ["옵션1", "옵션2", "옵션3"]  # 예시
+        return st.selectbox("값", options, key=f"{key}_value", label_visibility="visible")
+    elif column_type == "multi_select":
+        # 실제 구현에서는 해당 multi_select 옵션 목록을 가져와야 함
+        options = ["옵션1", "옵션2", "옵션3"]  # 예시
+        return st.multiselect("값", options, key=f"{key}_value", label_visibility="visible")
+    elif column_type == "date":
+        if operator in ["before", "after", "on_or_before", "on_or_after", "equals"]:
+            return st.date_input("날짜", key=f"{key}_value", label_visibility="visible")
+        else:
+            return None  # this_week, past_week 등은 값 입력 불필요
+    elif column_type == "checkbox":
+        return st.checkbox("참/거짓", key=f"{key}_value")
+    else:
+        return st.text_input("값", key=f"{key}_value", label_visibility="visible")
+# 필터 조건 UI 컴포넌트
+def render_filter_condition(db_name, columns_types, index, key_prefix):
+    st.markdown(f"##### 필터 조건 {index+1}")
+    
+    # 한 행을 3개 열로 분할
+    col1, col2, col3 = st.columns([3, 2, 3])
+    
+    # 칼럼 선택 (첫 번째 열)
+    with col1:
+        column = st.selectbox(
+            f"{db_name} 칼럼", 
+            options=list(columns_types.keys()), 
+            key=f"{key_prefix}_column_{index}"
+        )
+    
+    # 선택된 칼럼의 타입
+    column_type = columns_types.get(column, "text")
+    
+    # 연산자 선택 (두 번째 열)
+    with col2:
+        operators = get_filter_options(column_type)
+        operator = st.selectbox(
+            "연산자", 
+            options=operators, 
+            key=f"{key_prefix}_operator_{index}"
+        )
+    
+    # 필터 값 입력 (세 번째 열)
+    with col3:
+        if operator not in ["is_empty", "is_not_empty", "this_week", "past_week", "past_month", "past_year"]:
+            value = render_filter_value_input(column_type, operator, f"{key_prefix}_{index}")
+        else:
+            value = None
+            st.write("값 입력 불필요")
+        
+    return {
+        "column": column,
+        "operator": operator,
+        "value": value,
+        "type": column_type
+    }
+
 
 # 페이지 설정
 st.title("SQL IN NOTION PROJECT")
@@ -37,19 +119,25 @@ right_db_nm = right_db_label[0]
 st.write()
 st.markdown("---")
 
-# form init
+# JOIN 조건 수 초기화
 if "join_condition_count" not in st.session_state:
     st.session_state.join_condition_count = 1
 
+# LEFT WHERE 필터 수 초기화
+if "left_filter_count" not in st.session_state:
+    st.session_state.left_filter_count = 1
 
-# SELECT section
+# RIGHT WHERE 필터 수 초기화
+if "right_filter_count" not in st.session_state:
+    st.session_state.right_filter_count = 1
+
+# SELECT 폼
 st.markdown("# 🔍 SELECT")
-st.markdown("📋 가져올 칼럼 선택")
 with st.form("select_form"):
-    left_columns = st.multiselect(f"{left_db_nm} 칼럼", options=product_db["properties"].keys(), 
-                               default=list(product_db["properties"].keys()), key="left_columns")
-    right_columns = st.multiselect(f"{right_db_nm} 칼럼", options=order_db["properties"].keys(), 
-                                default=list(order_db["properties"].keys()), key="right_columns")
+    left_columns = st.multiselect(f"{left_db_nm} 칼럼", options=product_columns_types.keys(), 
+                               default=list(product_columns_types.keys()), key="left_columns")
+    right_columns = st.multiselect(f"{right_db_nm} 칼럼", options=order_columns_types.keys(), 
+                                default=list(order_columns_types.keys()), key="right_columns")
     select_submitted = st.form_submit_button("칼럼 선택 저장")
     
     if select_submitted:
@@ -59,54 +147,73 @@ with st.form("select_form"):
 
 st.markdown("---")
 
-st.markdown("# 📚 FROM") # FROM
+# FROM & LEFT WHERE
+st.markdown("# 📚 FROM")
 st.markdown(f"### {left_db_nm}")
-st.markdown("# 🔗 INNER JOIN") # INNERJOIN
+
+# LEFT WHERE 필터 추가 버튼 함수
+def add_left_filter():
+    st.session_state.left_filter_count += 1
+st.button("➕ LEFT 필터 추가", on_click=add_left_filter, key="add_left_filter")
+
+# LEFT WHERE 필터 조건 렌더링
+left_filters = []
+for i in range(st.session_state.left_filter_count):
+    filter_condition = render_filter_condition(left_db_nm, product_columns_types, i, "left_filter")
+    left_filters.append(filter_condition)
+    st.markdown("---")
+
+# INNER JOIN
+st.markdown("# 🔗 INNER JOIN")
 st.markdown(f"### {right_db_nm}")
+# RIGHT WHERE 필터 추가 버튼 함수
+def add_right_filter():
+    st.session_state.right_filter_count += 1
+st.button("➕ RIGHT 필터 추가", on_click=add_right_filter, key="add_right_filter")
 
-st.markdown("---")
+# RIGHT WHERE 필터 조건 렌더링
+right_filters = []
+for i in range(st.session_state.right_filter_count):
+    filter_condition = render_filter_condition(right_db_nm, order_columns_types, i, "right_filter")
+    right_filters.append(filter_condition)
+    st.markdown("---")
 
-# ON section
-if "join_condition_count" not in st.session_state:
-    st.session_state.join_condition_count = 1
-
+# ON 조건
 def add_join_condition():
     st.session_state.join_condition_count += 1
 
 st.markdown("## 🧩 ON")
 st.markdown(f"🔄 {left_db_nm}과 {right_db_nm}사이의 키 칼럼")
 
-st.button("➕ JOIN 조건 추가", on_click=add_join_condition)
+st.button("➕ JOIN 조건 추가", on_click=add_join_condition, key="add_join_condition")
 
 join_conditions = []
 for i in range(st.session_state.join_condition_count):
     col1, col2, col3 = st.columns([4, 1, 4])
     with col1:
-        left_col = st.selectbox(f"LEFT 칼럼 {i+1}", product_db["properties"].keys(), key=f"join_left_{i}")
+        left_col = st.selectbox(f"LEFT 칼럼 {i+1}", product_columns_types.keys(), key=f"join_left_{i}")
     with col2:
         st.markdown("#### =")
     with col3:
-        right_col = st.selectbox(f"RIGHT 칼럼 {i+1}", order_db["properties"].keys(), key=f"join_right_{i}")
+        right_col = st.selectbox(f"RIGHT 칼럼 {i+1}", order_columns_types.keys(), key=f"join_right_{i}")
     join_conditions.append((left_col, right_col))
 
 st.markdown("---")
 
-# WHERE section
-st.markdown("## 🚦 WHERE")
-st.markdown("🔍 JOIN 결과에서 추가 필터링이 필요할 경우")
-with st.form("where_form"):
-    where_condition = st.text_input("WHERE 조건 (SQL 구문)", key="where_condition")
-    where_submitted = st.form_submit_button("필터 조건 저장")
+# 최종 JOIN 실행
+if st.button("🚀 INNER JOIN 실행", key="execute_join"):
+    # 필터 조건과 JOIN 조건을 사용하여 결과 생성 로직
+    st.write("### LEFT 필터 조건:")
+    for i, filter_condition in enumerate(left_filters):
+        st.write(f"{i+1}. {filter_condition['column']} {filter_condition['operator']} {filter_condition['value']}")
     
-    if where_submitted:
-        st.session_state.where_condition = where_condition
-        st.success("필터 조건이 저장되었습니다.")
-
-st.markdown("---")
-
-# 최종 실행 버튼
-if st.button("🚀 INNER JOIN 실행"):
-    if hasattr(st.session_state, 'left_columns') and hasattr(st.session_state, 'right_columns'):
-        go_inner_join()
-    else:
-        st.warning("SELECT 칼럼을 먼저 저장해주세요.")
+    st.write("### RIGHT 필터 조건:")
+    for i, filter_condition in enumerate(right_filters):
+        st.write(f"{i+1}. {filter_condition['column']} {filter_condition['operator']} {filter_condition['value']}")
+    
+    st.write("### JOIN 조건:")
+    for i, (left_col, right_col) in enumerate(join_conditions):
+        st.write(f"{i+1}. {left_db_nm}.{left_col} = {right_db_nm}.{right_col}")
+    
+    # 여기에 실제 JOIN 연산 로직 구현
+    go_inner_join()
