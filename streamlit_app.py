@@ -198,6 +198,44 @@ for i in range(st.session_state.join_condition_count):
 st.button("➕ JOIN 조건 추가", on_click=add_join_condition, key="add_join_condition")
 st.markdown("---")
 
+
+# JOIN 결과를 저장할 Notion 페이지 선택 section
+st.markdown("## 📋 결과 저장 설정")
+
+# 사용자 페이지 목록 가져오기
+user_pages = notion.search(filter={"property": "object", "value": "page"})["results"]
+page_options = []
+
+for i, page in enumerate(user_pages):
+    # 페이지 제목 추출 (title 속성이 있는 경우)
+    if "properties" in page and "title" in page["properties"] and page["properties"]["title"]["title"]:
+        page_title = page["properties"]["title"]["title"][0]["plain_text"]
+    else:
+        page_title = f"Untitled Page {i+1}"
+    
+    page_options.append((page_title, page["id"]))
+
+# 페이지 선택 및 결과 DB 이름 입력
+if page_options:
+    st.session_state.save_page = st.selectbox(
+        "결과를 저장할 Notion 페이지", 
+        options=page_options, 
+        format_func=lambda x: x[0],
+        key="save_page_select"
+    )
+    
+    # 기본 이름 설정 - 현재 시간 포함
+    default_name = f"{left_db_nm}_{right_db_nm}_JOIN_{datetime.now().strftime('%Y%m%d')}"
+    st.session_state.save_db_name = st.text_input(
+        "저장할 데이터베이스 이름", 
+        value=default_name,
+        key="save_db_name_input"
+    )
+else:
+    st.warning("저장 가능한 Notion 페이지가 없습니다.")
+
+st.markdown("---")
+
 # Join
 if st.button("🚀 INNER JOIN 실행", key="execute_join"):
 

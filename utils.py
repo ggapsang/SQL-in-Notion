@@ -126,8 +126,18 @@ def perform_inner_join(left_df, right_df, join_conditions):
         st.error(f"조인 수행 중 오류 발생: {e}")
         return None
 
-def create_notion_database(notion, parent_page_id, database_name, columns):
-    """Notion에 새 데이터베이스 생성"""
+def create_notion_database(notion, parent_page_id, database_name, columns, left_columns_types=None, right_columns_types=None):
+    """
+    Notion에 새 데이터베이스 생성
+    
+    Args:
+        notion: Notion 클라이언트
+        parent_page_id: 부모 페이지 ID
+        database_name: 데이터베이스 이름
+        columns: 열 이름 목록
+        left_columns_types: 왼쪽 테이블 열 타입 정보 (선택적)
+        right_columns_types: 오른쪽 테이블 열 타입 정보 (선택적)
+    """
     properties = {}
     
     # Name 속성 (필수)
@@ -135,12 +145,31 @@ def create_notion_database(notion, parent_page_id, database_name, columns):
         "title": {}
     }
     
-    # 나머지 속성 추가
+    # 나머지 속성 추가 (타입 정보 활용)
     for col in columns:
-        if col != "Name":  # Name은 이미 추가됨
-            properties[col] = {
-                "rich_text": {}
-            }
+        if col == "Name":  # Name은 이미 추가됨
+            continue
+            
+        # 열 이름에서 '_right' 접미사 제거
+        original_col = col.replace('_right', '')
+        
+        # 타입 정보 찾기
+        col_type = None
+        if left_columns_types and original_col in left_columns_types:
+            col_type = left_columns_types[original_col]
+        elif right_columns_types and original_col in right_columns_types:
+            col_type = right_columns_types[original_col]
+        
+        # 열 타입에 따라 속성 설정
+        if col_type == "number":
+            properties[col] = {"number": {}}
+        elif col_type == "date":
+            properties[col] = {"date": {}}
+        elif col_type == "select":
+            properties[col] = {"select": {}}
+        else:
+            # 기본값은 일반 텍스트
+            properties[col] = {"rich_text": {}}
     
     try:
         response = notion.databases.create(
@@ -156,35 +185,81 @@ def create_notion_database(notion, parent_page_id, database_name, columns):
         st.error(f"데이터베이스 생성 중 오류 발생: {e}")
         return None
 
-def add_rows_to_notion_database(notion, database_id, df):
-    """DataFrame의 데이터를 Notion 데이터베이스에 행으로 추가"""
+def add_rows_to_notion_database(notion, database_id, dataframe, left_columns_types=None, right_columns_types=None):
+    """DataFrame의 행을 Notion 데이터베이스에 추가"""
+    total_rows = len(dataframe)
     success_count = 0
-    total_count = len(df)
     
-    with st.spinner(f'Notion에 {total_count}개 행 추가 중...'):
-        for i, row in df.iterrows():
-            try:
-                properties = {}
+    # 데이터베이스 스키마 정보 가져오기
+    db_info = notion.databases.retrieve(database_id=database_id)
+    db_properties = db_info["properties"]
+    
+    for _, row in dataframe.iterrows():
+        # 행 데이터로 properties 구성
+        properties = {}
+        for col in dataframe.columns:
+            value = row[col]
+            
+            # 컬럼 속성 타입 확인
+            if col in db_properties:
+                prop_type = db_properties[col]["type"]
                 
-                # 첫 번째 열을 title로 사용
-                first_col = df.columns[0]
-                properties["Name"] = {
-                    "title": [{"text": {"content": str(row[first_col])}}]
-                }
-                
-                # 나머지 열을 rich_text로 추가
-                for col in df.columns:
-                    if col != first_col:
-                        properties[col] = {
-                            "rich_text": [{"text": {"content": str(row[col])}}]
-                        }
-                
-                notion.pages.create(
-                    parent={"database_id": database_id},
-                    properties=properties
-                )
-                success_count += 1
-            except Exception as e:
-                st.error(f"행 {i+1} 추가 중 오류: {e}")
+                # 타입에 따라 다르게 처리
+                if prop_type == "title":
+                    properties[col] = {
+                        "title": [{"text": {"content": str(value)}}]
+                    }
+                elif prop_type == "rich_text":
+                    properties[col] = {
+                        "rich_text": [{"text": {"content": str(value)}}]
+                    }
+                elif prop_type == "number":
+                    # 숫자로 변환 시도
+                    try:
+                        num_value = float(value) if value is not None else None
+                        properties[col] = {"number": num_value}
+                    except (ValueError, TypeError):
+                        properties[col] = {"number": None}
+                elif prop_type == "date":
+                    # 날짜 형식으로 변환
+                    try:
+                        if isinstance(value, pd.Timestamp) or isinstance(value, datetime):
+                            date_str = value.isoformat()
+                            properties[col] = {"date": {"start": date_str}}
+                        else:
+                            properties[col] = {"date": None}
+                    except Exception:
+                        properties[col] = {"date": None}
+                elif prop_type == "select":
+                    # 선택 옵션
+                    if value:
+                        properties[col] = {"select": {"name": str(value)}}
+                    else:
+                        properties[col] = {"select": None}
+                elif prop_type == "multi_select":
+                    # 다중 선택 (문자열을 쉼표로 분리)
+                    if isinstance(value, str) and value:
+                        options = [{"name": option.strip()} for option in value.split(',')]
+                        properties[col] = {"multi_select": options}
+                    else:
+                        properties[col] = {"multi_select": []}
+                elif prop_type == "checkbox":
+                    # 불리언 값
+                    bool_value = bool(value) if value is not None else False
+                    properties[col] = {"checkbox": bool_value}
+                else:
+                    # 기타 타입은 텍스트로 변환
+                    properties[col] = {
+                        "rich_text": [{"text": {"content": str(value)}}]
+                    }
         
-        return success_count, total_count
+        try:
+            notion.pages.create(
+                parent={"database_id": database_id},
+                properties=properties
+            )
+            success_count += 1
+        except Exception as e:
+            st.error(f"행 {_+1} 추가 중 오류: {e}")
+    
+    return success_count, total_rows
