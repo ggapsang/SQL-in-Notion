@@ -7,9 +7,9 @@ import requests
 import base64
 
 # OAuth 인증 처리
-CLIENT_ID = "1dcd872b-594c-80b7-9644-0037a0db3ca0"
-CLIENT_SECRET = "secret_bjjfKYTIliO7WQicAytKiCSOVoVBrztJqNa6tQO1H1q"
-REDIRECT_URI = "https://notiondbformula-nve9ydzj3dxkbgswaj392v.streamlit.app/"
+CLIENT_ID = "1dfd872b-594c-8064-88b2-00370275a0d4"
+CLIENT_SECRET = "secret_K7Fz7JikGMDqEmLlw1I4dfRrpj2gAU4izaUuEOmMKHr"
+REDIRECT_URI = "https://sql-in-notion.streamlit.app/"
 
 # 인증되지 않은 경우 → 인증 유도
 if "access_token" not in st.session_state:
