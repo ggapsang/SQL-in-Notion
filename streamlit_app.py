@@ -49,14 +49,14 @@ if "access_token" not in st.session_state:
 # Notion 클라이언트 생성 (세션에서 토큰 사용)
 notion = Client(auth=st.session_state.access_token)
 
-SAMPLE_PRODUCT_DB_ID = "1ddc9e591278815a8c0ac7e88daf78d1"
-SAMPLE_ORDER_DB_ID = "1ddc9e59127881eca812cf3238d176bb"
+# SAMPLE_PRODUCT_DB_ID = "1ddc9e591278815a8c0ac7e88daf78d1"
+# SAMPLE_ORDER_DB_ID = "1ddc9e59127881eca812cf3238d176bb"
 
-product_db_id = format_database_id(SAMPLE_PRODUCT_DB_ID)
-order_db_id = format_database_id(SAMPLE_ORDER_DB_ID)
+# product_db_id = format_database_id(SAMPLE_PRODUCT_DB_ID)
+# order_db_id = format_database_id(SAMPLE_ORDER_DB_ID)
 
-product_db, product_columns_types = load_database_info(notion, product_db_id)
-order_db, order_columns_types = load_database_info(notion, order_db_id)
+# product_db, product_columns_types = load_database_info(notion, product_db_id)
+# order_db, order_columns_types = load_database_info(notion, order_db_id)
 
 # 칼럼 타입에 따른 필터 옵션 정의
 def get_filter_options(column_type):
