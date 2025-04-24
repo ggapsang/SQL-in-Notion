@@ -172,10 +172,6 @@ with st.form("database_selection"):
             formatted_left_db_id = left_db_label[1]
             formatted_right_db_id = right_db_label[1]
             
-            # 디버깅을 위해 변환된 ID 출력
-            st.write(f"변환된 LEFT DB ID: {formatted_left_db_id}")
-            st.write(f"변환된 RIGHT DB ID: {formatted_right_db_id}")
-            
             # 데이터베이스 정보 로드
             left_db_info, left_columns_types = load_database_info(notion, formatted_left_db_id)
             right_db_info, right_columns_types = load_database_info(notion, formatted_right_db_id)
