@@ -3,9 +3,51 @@ from notion_client import Client
 from datetime import datetime, timedelta
 from utils import format_database_id, get_user_databases, get_database_rows, get_database_columns, extract_text_value, load_database_info
 from main import main
+import requests
+import base64
 
-# Notion 설정
-notion = Client(auth="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")  # 테스트용 토큰
+# OAuth 인증 처리
+CLIENT_ID = "1dcd872b-594c-80b7-9644-0037a0db3ca0"
+CLIENT_SECRET = "secret_bjjfKYTIliO7WQicAytKiCSOVoVBrztJqNa6tQO1H1q"
+REDIRECT_URI = "https://notiondbformula-nve9ydzj3dxkbgswaj392v.streamlit.app/"
+
+# 인증되지 않은 경우 → 인증 유도
+if "access_token" not in st.session_state:
+    code = st.query_params.get("code")
+
+    if code is None:
+        st.title("🔐 Notion 계정 연결이 필요합니다")
+        #auth_url = r"https://api.notion.com/v1/oauth/authorize?client_id=1dcd872b-594c-80b7-9644-0037a0db3ca0&response_type=code&owner=user&redirect_uri=https%3A%2F%2Fnotiondbformula-nve9ydzj3dxkbgswaj392v.streamlit.app%2F"
+        auth_url = f"https://api.notion.com/v1/oauth/authorize?client_id={CLIENT_ID}&response_type=code&owner=user&redirect_uri={REDIRECT_URI}"
+        st.markdown(f"[👉 Notion 계정 연결하기]({auth_url})")
+        st.stop()
+
+    # access_token 요청
+    auth_token = base64.b64encode(f"{CLIENT_ID}:{CLIENT_SECRET}".encode()).decode()
+    
+    response = requests.post(
+        "https://api.notion.com/v1/oauth/token",
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Basic {auth_token}"
+        },
+        json={
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": REDIRECT_URI
+        }
+    )
+
+    if response.status_code != 200:
+        st.error("❌ 인증 토큰 요청 실패")
+        st.text(response.text)
+        st.stop()
+
+    token_data = response.json()
+    st.session_state.access_token = token_data["access_token"]
+
+# Notion 클라이언트 생성 (세션에서 토큰 사용)
+notion = Client(auth=st.session_state.access_token)
 
 SAMPLE_PRODUCT_DB_ID = "1ddc9e591278815a8c0ac7e88daf78d1"
 SAMPLE_ORDER_DB_ID = "1ddc9e59127881eca812cf3238d176bb"
