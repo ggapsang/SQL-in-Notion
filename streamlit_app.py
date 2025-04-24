@@ -164,28 +164,28 @@ with st.form("database_selection"):
     db_selection_submitted = st.form_submit_button("데이터베이스 선택 확인")
     
     if db_selection_submitted:
-        # 데이터베이스 ID 추출 부분
-        left_db_id = left_db_label[1]  # 원래 형태 그대로 가져옴
-        right_db_id = right_db_label[1]  # 원래 형태 그대로 가져옴
-
-        # 데이터베이스 정보 로드
+        # 디버깅을 위해 원본 ID 출력
+        st.write(f"원본 LEFT DB ID: {left_db_label[1]}")
+        st.write(f"원본 RIGHT DB ID: {right_db_label[1]}")
+        
         try:
-            # format_database_id 함수를 통해 변환
-            formatted_left_db_id = format_database_id(left_db_id)
-            formatted_right_db_id = format_database_id(right_db_id)
+            # format_database_id 함수로 ID 변환
+            formatted_left_db_id = format_database_id(left_db_label[1])
+            formatted_right_db_id = format_database_id(right_db_label[1])
             
+            # 디버깅을 위해 변환된 ID 출력
+            st.write(f"변환된 LEFT DB ID: {formatted_left_db_id}")
+            st.write(f"변환된 RIGHT DB ID: {formatted_right_db_id}")
+            
+            # 데이터베이스 정보 로드
             left_db_info, left_columns_types = load_database_info(notion, formatted_left_db_id)
             right_db_info, right_columns_types = load_database_info(notion, formatted_right_db_id)
             
-            # 세션 상태에도 변환된 ID 저장
-            st.session_state.left_db_id = formatted_left_db_id
-            st.session_state.right_db_id = formatted_right_db_id
-            
-            # 세션 상태에 저장
+            # 세션 상태에 저장 - 원본 ID를 다시 덮어쓰지 않도록 수정
             st.session_state.left_db_nm = left_db_label[0]
             st.session_state.right_db_nm = right_db_label[0]
-            st.session_state.left_db_id = left_db_id
-            st.session_state.right_db_id = right_db_id
+            st.session_state.left_db_id = formatted_left_db_id  # 변환된 ID 사용
+            st.session_state.right_db_id = formatted_right_db_id  # 변환된 ID 사용
             st.session_state.left_columns_types = left_columns_types
             st.session_state.right_columns_types = right_columns_types
             st.session_state.db_selected = True
