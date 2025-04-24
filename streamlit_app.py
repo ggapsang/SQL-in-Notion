@@ -17,7 +17,6 @@ if "access_token" not in st.session_state:
 
     if code is None:
         st.title("🔐 Notion 계정 연결이 필요합니다")
-        #auth_url = r"https://api.notion.com/v1/oauth/authorize?client_id=1dcd872b-594c-80b7-9644-0037a0db3ca0&response_type=code&owner=user&redirect_uri=https%3A%2F%2Fnotiondbformula-nve9ydzj3dxkbgswaj392v.streamlit.app%2F"
         auth_url = f"https://api.notion.com/v1/oauth/authorize?client_id={CLIENT_ID}&response_type=code&owner=user&redirect_uri={REDIRECT_URI}"
         st.markdown(f"[👉 Notion 계정 연결하기]({auth_url})")
         st.stop()
@@ -48,15 +47,6 @@ if "access_token" not in st.session_state:
 
 # Notion 클라이언트 생성 (세션에서 토큰 사용)
 notion = Client(auth=st.session_state.access_token)
-
-# SAMPLE_PRODUCT_DB_ID = "1ddc9e591278815a8c0ac7e88daf78d1"
-# SAMPLE_ORDER_DB_ID = "1ddc9e59127881eca812cf3238d176bb"
-
-# product_db_id = format_database_id(SAMPLE_PRODUCT_DB_ID)
-# order_db_id = format_database_id(SAMPLE_ORDER_DB_ID)
-
-# product_db, product_columns_types = load_database_info(notion, product_db_id)
-# order_db, order_columns_types = load_database_info(notion, order_db_id)
 
 # 칼럼 타입에 따른 필터 옵션 정의
 def get_filter_options(column_type):
@@ -146,19 +136,9 @@ def render_filter_condition(db_name, columns_types, index, key_prefix):
 st.title("SQL IN NOTION PROJECT")
 st.subheader("INNER JOIN")
 
-db_options = get_user_databases(notion)
-if not db_options:
-    st.warning("⚠️ 접근 가능한 데이터베이스가 없습니다.")
-    st.stop()
-
-left_db_label = st.selectbox("📂 LEFT 데이터베이스 선택", db_options, index=0, key="left_db_label")
-right_db_label = st.selectbox("📂 RIGHT 데이터베이스 선택", db_options, index=1, key="right_db_label")
-
-left_db_nm = left_db_label[0]
-right_db_nm = right_db_label[0]
-
-st.write()
-st.markdown("---")
+# 세션 상태 초기화
+if "db_selected" not in st.session_state:
+    st.session_state.db_selected = False
 
 if "join_condition_count" not in st.session_state:
     st.session_state.join_condition_count = 1
@@ -169,132 +149,176 @@ if "left_filter_count" not in st.session_state:
 if "right_filter_count" not in st.session_state:
     st.session_state.right_filter_count = 0
 
-# SELECT section
-st.markdown("# 🔍 SELECT")
-with st.form("select_form"):
-    # 키 이름을 변경 (_select 접미사 추가)
-    left_columns = st.multiselect(f"{left_db_nm} 칼럼", options=product_columns_types.keys(), 
-                               default=list(product_columns_types.keys()), key="left_columns_select")
-    right_columns = st.multiselect(f"{right_db_nm} 칼럼", options=order_columns_types.keys(), 
-                                default=list(order_columns_types.keys()), key="right_columns_select")
-    select_submitted = st.form_submit_button("칼럼 선택 저장")
+# 데이터베이스 선택 섹션
+db_options = get_user_databases(notion)
+if not db_options:
+    st.warning("⚠️ 접근 가능한 데이터베이스가 없습니다.")
+    st.stop()
+
+with st.form("database_selection"):
+    st.markdown("## 데이터베이스 선택")
+    left_db_label = st.selectbox("📂 LEFT 데이터베이스 선택", db_options, index=0, key="left_db_label")
+    right_db_label = st.selectbox("📂 RIGHT 데이터베이스 선택", db_options, index=1, key="right_db_label")
     
-    if select_submitted:
-        # 다른 키 이름으로 저장 (_selected 접미사 사용)
-        st.session_state.left_columns_selected = left_columns
-        st.session_state.right_columns_selected = right_columns
-        st.success("칼럼 선택이 저장되었습니다.")
+    # 데이터베이스 선택 확인 버튼
+    db_selection_submitted = st.form_submit_button("데이터베이스 선택 확인")
+    
+    if db_selection_submitted:
+        # 데이터베이스 ID 추출
+        left_db_id = format_database_id(left_db_label[1])
+        right_db_id = format_database_id(right_db_label[1])
+        
+        # 데이터베이스 정보 로드
+        try:
+            left_db_info, left_columns_types = load_database_info(notion, left_db_id)
+            right_db_info, right_columns_types = load_database_info(notion, right_db_id)
+            
+            # 세션 상태에 저장
+            st.session_state.left_db_nm = left_db_label[0]
+            st.session_state.right_db_nm = right_db_label[0]
+            st.session_state.left_db_id = left_db_id
+            st.session_state.right_db_id = right_db_id
+            st.session_state.left_columns_types = left_columns_types
+            st.session_state.right_columns_types = right_columns_types
+            st.session_state.db_selected = True
+            
+            st.success("데이터베이스가 성공적으로 로드되었습니다!")
+        except Exception as e:
+            st.error(f"데이터베이스 로드 중 오류 발생: {str(e)}")
+            st.session_state.db_selected = False
 
-st.markdown("---")
+# 데이터베이스 선택 후에만 나머지 UI 표시
+if st.session_state.db_selected:
+    st.markdown("---")
+    
+    left_db_nm = st.session_state.left_db_nm
+    right_db_nm = st.session_state.right_db_nm
+    left_columns_types = st.session_state.left_columns_types
+    right_columns_types = st.session_state.right_columns_types
 
-# FROM section
-st.markdown("# 📚 FROM")
-st.markdown(f"### {left_db_nm}")
+    # SELECT section
+    st.markdown("# 🔍 SELECT")
+    with st.form("select_form"):
+        # 키 이름을 변경 (_select 접미사 추가)
+        left_columns = st.multiselect(f"{left_db_nm} 칼럼", options=left_columns_types.keys(), 
+                                   default=list(left_columns_types.keys()), key="left_columns_select")
+        right_columns = st.multiselect(f"{right_db_nm} 칼럼", options=right_columns_types.keys(), 
+                                    default=list(right_columns_types.keys()), key="right_columns_select")
+        select_submitted = st.form_submit_button("칼럼 선택 저장")
+        
+        if select_submitted:
+            # 다른 키 이름으로 저장 (_selected 접미사 사용)
+            st.session_state.left_columns_selected = left_columns
+            st.session_state.right_columns_selected = right_columns
+            st.success("칼럼 선택이 저장되었습니다.")
 
-def add_left_filter():
-    st.session_state.left_filter_count += 1
+    st.markdown("---")
 
-## LEFT WHERE 필터 조건 렌더링
-left_filters = []
-for i in range(st.session_state.left_filter_count):
-    filter_condition = render_filter_condition(left_db_nm, product_columns_types, i, "left_filter")
-    left_filters.append(filter_condition)
-st.button("➕ 필터 추가", on_click=add_left_filter, key="add_left_filter")
-st.markdown("---")
+    # FROM section
+    st.markdown("# 📚 FROM")
+    st.markdown(f"### {left_db_nm}")
 
-# INNER JOIN section
-st.markdown("# 🔗 INNER JOIN")
-st.markdown(f"### {right_db_nm}")
+    def add_left_filter():
+        st.session_state.left_filter_count += 1
 
-def add_right_filter():
-    st.session_state.right_filter_count += 1
+    ## LEFT WHERE 필터 조건 렌더링
+    left_filters = []
+    for i in range(st.session_state.left_filter_count):
+        filter_condition = render_filter_condition(left_db_nm, left_columns_types, i, "left_filter")
+        left_filters.append(filter_condition)
+    st.button("➕ 필터 추가", on_click=add_left_filter, key="add_left_filter")
+    st.markdown("---")
 
-## RIGHT WHERE 필터 조건 렌더링
-right_filters = []
-for i in range(st.session_state.right_filter_count):
-    filter_condition = render_filter_condition(right_db_nm, order_columns_types, i, "right_filter")
-    right_filters.append(filter_condition)
+    # INNER JOIN section
+    st.markdown("# 🔗 INNER JOIN")
+    st.markdown(f"### {right_db_nm}")
 
-st.button("➕ RIGHT 필터 추가", on_click=add_right_filter, key="add_right_filter")
-st.markdown("---")
+    def add_right_filter():
+        st.session_state.right_filter_count += 1
 
+    ## RIGHT WHERE 필터 조건 렌더링
+    right_filters = []
+    for i in range(st.session_state.right_filter_count):
+        filter_condition = render_filter_condition(right_db_nm, right_columns_types, i, "right_filter")
+        right_filters.append(filter_condition)
 
-# ON section
-def add_join_condition():
-    st.session_state.join_condition_count += 1
+    st.button("➕ RIGHT 필터 추가", on_click=add_right_filter, key="add_right_filter")
+    st.markdown("---")
 
-st.markdown("## 🧩 ON")
-st.markdown(f"🔄 {left_db_nm}과 {right_db_nm} 사이의 키 칼럼")
+    # ON section
+    def add_join_condition():
+        st.session_state.join_condition_count += 1
 
-join_conditions = []
-for i in range(st.session_state.join_condition_count):
-    col1, col2, col3 = st.columns([4, 1, 4])
-    with col1:
-        left_col = st.selectbox(f"{left_db_nm}", product_columns_types.keys(), key=f"join_left_{i}")
-    with col2:
-        st.markdown("#### =")
-    with col3:
-        right_col = st.selectbox(f"{right_db_nm}", order_columns_types.keys(), key=f"join_right_{i}")
-    join_conditions.append((left_col, right_col))
+    st.markdown("## 🧩 ON")
+    st.markdown(f"🔄 {left_db_nm}과 {right_db_nm} 사이의 키 칼럼")
 
-st.button("➕ JOIN 조건 추가", on_click=add_join_condition, key="add_join_condition")
-st.markdown("---")
+    join_conditions = []
+    for i in range(st.session_state.join_condition_count):
+        col1, col2, col3 = st.columns([4, 1, 4])
+        with col1:
+            left_col = st.selectbox(f"{left_db_nm}", left_columns_types.keys(), key=f"join_left_{i}")
+        with col2:
+            st.markdown("#### =")
+        with col3:
+            right_col = st.selectbox(f"{right_db_nm}", right_columns_types.keys(), key=f"join_right_{i}")
+        join_conditions.append((left_col, right_col))
 
+    st.button("➕ JOIN 조건 추가", on_click=add_join_condition, key="add_join_condition")
+    st.markdown("---")
 
-# JOIN 결과를 저장할 Notion 페이지 선택 section
-st.markdown("## 📋 결과 저장 설정")
+    # JOIN 결과를 저장할 Notion 페이지 선택 section
+    st.markdown("## 📋 결과 저장 설정")
 
-# 사용자 페이지 목록 가져오기
-user_pages = notion.search(filter={"property": "object", "value": "page"})["results"]
-page_options = []
+    # 사용자 페이지 목록 가져오기
+    user_pages = notion.search(filter={"property": "object", "value": "page"})["results"]
+    page_options = []
 
-for i, page in enumerate(user_pages):
-    # 페이지 제목 추출 (title 속성이 있는 경우)
-    if "properties" in page and "title" in page["properties"] and page["properties"]["title"]["title"]:
-        page_title = page["properties"]["title"]["title"][0]["plain_text"]
+    for i, page in enumerate(user_pages):
+        # 페이지 제목 추출 (title 속성이 있는 경우)
+        if "properties" in page and "title" in page["properties"] and page["properties"]["title"]["title"]:
+            page_title = page["properties"]["title"]["title"][0]["plain_text"]
+        else:
+            page_title = f"Untitled Page {i+1}"
+        
+        page_options.append((page_title, page["id"]))
+
+    # 페이지 선택 및 결과 DB 이름 입력
+    if page_options:
+        st.session_state.save_page = st.selectbox(
+            "결과를 저장할 Notion 페이지", 
+            options=page_options, 
+            format_func=lambda x: x[0],
+            key="save_page_select"
+        )
+        
+        # 기본 이름 설정 - 현재 시간 포함
+        default_name = f"{left_db_nm}_{right_db_nm}_JOIN_{datetime.now().strftime('%Y%m%d')}"
+        st.session_state.save_db_name = st.text_input(
+            "저장할 데이터베이스 이름", 
+            value=default_name,
+            key="save_db_name_input"
+        )
     else:
-        page_title = f"Untitled Page {i+1}"
-    
-    page_options.append((page_title, page["id"]))
+        st.warning("저장 가능한 Notion 페이지가 없습니다.")
 
-# 페이지 선택 및 결과 DB 이름 입력
-if page_options:
-    st.session_state.save_page = st.selectbox(
-        "결과를 저장할 Notion 페이지", 
-        options=page_options, 
-        format_func=lambda x: x[0],
-        key="save_page_select"
-    )
-    
-    # 기본 이름 설정 - 현재 시간 포함
-    default_name = f"{left_db_nm}_{right_db_nm}_JOIN_{datetime.now().strftime('%Y%m%d')}"
-    st.session_state.save_db_name = st.text_input(
-        "저장할 데이터베이스 이름", 
-        value=default_name,
-        key="save_db_name_input"
-    )
-else:
-    st.warning("저장 가능한 Notion 페이지가 없습니다.")
+    st.markdown("---")
 
-st.markdown("---")
+    # Join
+    if st.button("🚀 INNER JOIN 실행", key="execute_join"):
+        st.write("#### LEFT 필터:")
+        for i, filter_condition in enumerate(left_filters):
+            st.write(f"{i+1}. {filter_condition['column']} {filter_condition['operator']} {filter_condition['value']}")
+        
+        st.write("#### RIGHT 필터:")
+        for i, filter_condition in enumerate(right_filters):
+            st.write(f"{i+1}. {filter_condition['column']} {filter_condition['operator']} {filter_condition['value']}")
+        
+        st.write("#### JOIN:")
+        for i, (left_col, right_col) in enumerate(join_conditions):
+            st.write(f"{i+1}. {left_db_nm}.{left_col} = {right_db_nm}.{right_col}")
+        
+        # 세션 상태에 필터 조건 저장
+        st.session_state.left_filters = left_filters
+        st.session_state.right_filters = right_filters
 
-# Join
-if st.button("🚀 INNER JOIN 실행", key="execute_join"):
-
-    st.write("#### LEFT 필터:")
-    for i, filter_condition in enumerate(left_filters):
-        st.write(f"{i+1}. {filter_condition['column']} {filter_condition['operator']} {filter_condition['value']}")
-    
-    st.write("#### RIGHT 필터")
-    for i, filter_condition in enumerate(right_filters):
-        st.write(f"{i+1}. {filter_condition['column']} {filter_condition['operator']} {filter_condition['value']}")
-    
-    st.write("#### JOIN:")
-    for i, (left_col, right_col) in enumerate(join_conditions):
-        st.write(f"{i+1}. {left_db_nm}.{left_col} = {right_db_nm}.{right_col}")
-    
-    # 세션 상태에 필터 조건 저장
-    st.session_state.left_filters = left_filters
-    st.session_state.right_filters = right_filters
-
-    main(notion)
+        main(notion)
